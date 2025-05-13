@@ -25,5 +25,5 @@ python3 app.py
 
 ## Access the Web Server
 
-- * Running on all addresses (0.0.0.0)
-- * Running on http://x.x.x.x:5000
+* Running on all addresses (0.0.0.0)
+* Running on http://x.x.x.x:5000
