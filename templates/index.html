@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DSAI Capstone</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <!-- Add Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>FinGPT Advisor Template</h1>
+        
+        <!-- Input type selector -->
+        <div class="input-selector">
+            <button class="input-type-btn active" data-type="text">Text Input</button>
+            <button class="input-type-btn" data-type="file">File Upload</button>
+        </div>
+
+        <!-- Text input form -->
+        <form method="POST" class="chat-form" id="textForm">
+            <div class="input-section">
+                <textarea 
+                    name="prompt" 
+                    id="promptInput" 
+                    placeholder="Enter your prompt here... Ask me anything!"
+                    required
+                ></textarea>
+                <div class="button-container">
+                    <button type="submit" id="submitButton">Send Message</button>
+                </div>
+            </div>
+        </form>
+
+        <!-- File upload form -->
+        <form method="POST" class="chat-form" id="fileForm" style="display: none;">
+            <div class="input-section">
+                <div class="file-upload-container">
+                    <input type="file" id="fileInput" name="file" accept=".txt,.pdf,.doc,.docx" required>
+                    <p class="file-info">Supported formats: .txt, .pdf, .doc, .docx</p>
+                </div>
+                <textarea 
+                    name="prompt" 
+                    id="filePrompt" 
+                    placeholder="Enter your question about the uploaded file..."
+                    required
+                ></textarea>
+                <div class="button-container">
+                    <button type="submit" id="fileSubmitButton">Analyze File</button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Loading overlay (hidden by default) -->
+        <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <div class="loading-message">
+                    <h3>Processing by AI</h3>
+                    <p id="loadingText">Please wait while the response is being generated...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Response container -->
+        <div id="responseContainer" class="response" style="display: none;"></div>
+    </div>
+
+    <script>
+        // Initialize elements
+        const form = document.getElementById('textForm');
+        const fileForm = document.getElementById('fileForm');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+        const responseContainer = document.getElementById('responseContainer');
+        const submitButton = document.getElementById('submitButton');
+        const promptInput = document.getElementById('promptInput');
+
+        // Configure marked options
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            headerIds: false,
+            mangle: false,
+            sanitize: false
+        });
+
+        function renderMarkdown(text) {
+            try {
+                text = text.replace(/```(\w+)?\n([\s\S]*?)```/g, function(match, language, code) {
+                    return `\n\`\`\`${language || ''}\n${code.trim()}\n\`\`\`\n`;
+                });
+                return marked.parse(text);
+            } catch (error) {
+                console.error('Markdown parsing error:', error);
+                return text;
+            }
+        }
+
+
+        function showLoadingOverlay(message = 'Please wait while the response is being generated') {
+            loadingText.textContent = message;
+            loadingOverlay.style.display = 'flex';
+       //     
+       //     let dots = 0;
+       //     return setInterval(() => {
+       //         dots = (dots + 1) % 4;
+       //         loadingText.textContent = message + '.'.repeat(dots);
+       //     }, 500);
+        }
+
+        // Handle input type switching
+        document.querySelectorAll('.input-type-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.input-type-btn').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                const type = button.dataset.type;
+                document.getElementById('textForm').style.display = type === 'text' ? 'block' : 'none';
+                document.getElementById('fileForm').style.display = type === 'file' ? 'block' : 'none';
+            });
+        });
+
+        // Handle text form submission
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const loadingInterval = showLoadingOverlay();
+            form.classList.add('form-disabled');
+            responseContainer.style.display = 'none';
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+            try {
+                const formData = new FormData(form);
+                const response = await fetch('/', {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    responseContainer.innerHTML = renderMarkdown(data.response);
+                } else {
+                    responseContainer.innerHTML = renderMarkdown(`**Error:** ${data.response}`);
+                }
+                responseContainer.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error:', error);
+                if (error.name === 'AbortError') {
+                    responseContainer.innerHTML = renderMarkdown('**Error:** Request timed out. Please try again.');
+                } else {
+                    responseContainer.innerHTML = renderMarkdown('**Error:** An error occurred while processing your request.');
+                }
+                responseContainer.style.display = 'block';
+            } finally {
+                clearInterval(loadingInterval);
+                loadingOverlay.style.display = 'none';
+                form.classList.remove('form-disabled');
+                form.reset();
+            }
+        });
+
+        // Handle file form submission
+        fileForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+            const fileInput = document.getElementById('fileInput');
+
+            if (!fileInput.files[0]) {
+                alert('Please select a file');
+                return;
+            }
+
+            const loadingInterval = showLoadingOverlay('Please wait while the file is being processed');
+            this.classList.add('form-disabled');
+            responseContainer.style.display = 'none';
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+            try {
+                const response = await fetch('/analyze_file', {
+                    method: 'POST',
+                    body: formData,
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    responseContainer.innerHTML = renderMarkdown(data.response);
+                } else {
+                    responseContainer.innerHTML = renderMarkdown(`**Error:** ${data.response}`);
+                }
+                responseContainer.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error:', error);
+                responseContainer.innerHTML = renderMarkdown('**Error:** An error occurred while processing your file.');
+                responseContainer.style.display = 'block';
+            } finally {
+                clearInterval(loadingInterval);
+                loadingOverlay.style.display = 'none';
+                this.classList.remove('form-disabled');
+                this.reset();
+            }
+        });
+
+        // Prevent form resubmission on page refresh
+        if (window.history.replaceState) {
+            window.history.replaceState(null, null, window.location.href);
+        }
+    </script>
+</body>
+</html>

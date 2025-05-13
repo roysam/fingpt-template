@@ -1,0 +1,11 @@
+gunicorn
+flask-cors
+python-dotenv
+google-generativeai
+google-auth
+google-cloud-aiplatform
+python-docx
+PyPDF2
+flask
+vertexai
+python-docx
